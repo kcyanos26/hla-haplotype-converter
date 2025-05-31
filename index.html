@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HLA Haplotype Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input {
+            padding: 5px;
+            width: 300px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>HLA Haplotype Converter</h1>
+    
+    <div class="input-group">
+        <label>Enter DRB1:</label>
+        <input type="text" id="drb1Input1" placeholder="e.g., DRB1*01:01"><br>
+        <input type="text" id="drb1Input2" placeholder="e.g., DRB1*15:01">
+    </div>
+    <div class="input-group">
+        <label>Enter DRB3:</label>
+        <input type="text" id="drb3Input1" placeholder="e.g., DRB3*01:01">
+        <input type="text" id="drb3Input2" placeholder="e.g., DRB3*15:01">
+    </div>
+    <div class="input-group">
+        <label>Enter DRB4:</label>
+        <input type="text" id="drb4Input1" placeholder="e.g., DRB4*01:01">
+        <input type="text" id="drb4Input2" placeholder="e.g., DRB4*15:01">
+    </div>
+    <div class="input-group">
+        <label>Enter DRB5:</label>
+        <input type="text" id="drb5Input1" placeholder="e.g., DRB5*01:01">
+        <input type="text" id="drb5Input2" placeholder="e.g., DRB5*15:01">
+    </div>
+    <div class="input-group">
+        <label>Enter DQB1:</label>
+        <input type="text" id="dqb1Input1" placeholder="e.g., DQB1*01:01">
+        <input type="text" id="dqb1Input2" placeholder="e.g., DQB1*15:01">
+    </div>
+
+    <button onclick="convertHaplotypes()">Convert</button>
+
+    <div id="result"></div>
+
+    <script>
+        function getDRB3Summary(allele) {
+            if (!allele) return '';
+            // Only use the number after the asterisk and the number after the first colon
+            const match = allele.match(/^DRB3\*(\d{1,2}):(\d{2})/i);
+            if (match) {
+                if (match[1] === '03') {
+                    if (match[2] === '01') return '52A';
+                    if (match[2] === '02') return '52B';
+                    if (match[2] === '03') return '52C';
+                }
+            }
+            // Any other DRB3, just 52
+            if (allele.match(/^DRB3\*/i)) return '52';
+            return '';
+        }
+        function getDRB4Summary(allele) {
+            if (allele && allele.match(/^DRB4\*/i)) return '53';
+            return '';
+        }
+        function getDRB5Summary(allele) {
+            if (allele && allele.match(/^DRB5\*/i)) return '51';
+            return '';
+        }
+        function getDRB1Summary(allele) {
+            // Accept anything after the first colon, but only use the number after the asterisk
+            const match = allele.match(/^DRB1\*0?(\d{1,2})/i);
+            if (match && match[1] === '3') return '17';
+            if (match) return String(parseInt(match[1], 10));
+            return '';
+        }
+        function getDQB1Summary(allele) {
+            // Accept anything after the first colon, but only use the number after the asterisk
+            const match = allele.match(/^DQB1\*(\d{2})/i);
+            if (match) return String(parseInt(match[1], 10));
+            return '';
+        }
+        function isNoDRB3B4B5(drb1) {
+            // If DRB1 is 1, 8, or 10
+            const match = drb1.match(/^DRB1\*(0?1|0?8|10):\d{2}$/i);
+            return !!match;
+        }
+        function cartesianProduct(arrays) {
+            return arrays.reduce((a, b) => a.flatMap(d => b.map(e => [].concat(d, e))));
+        }
+        function getDRB345Pair(alleles3, alleles4, alleles5, idx1, idx2) {
+            // Only one of DRB3/4/5 will be present for a given haplotype
+            if (alleles3[idx1]) return alleles3[idx1];
+            if (alleles4[idx1]) return alleles4[idx1];
+            if (alleles5[idx1]) return alleles5[idx1];
+            return '';
+        }
+        function convertHaplotypes() {
+            const loci = [
+                { label: 'DRB1', ids: ['drb1Input1', 'drb1Input2'], summary: getDRB1Summary },
+                { label: 'DQB1', ids: ['dqb1Input1', 'dqb1Input2'], summary: getDQB1Summary },
+                { label: 'DRB3', ids: ['drb3Input1', 'drb3Input2'], summary: getDRB3Summary },
+                { label: 'DRB4', ids: ['drb4Input1', 'drb4Input2'], summary: getDRB4Summary },
+                { label: 'DRB5', ids: ['drb5Input1', 'drb5Input2'], summary: getDRB5Summary }
+            ];
+            const resultDiv = document.getElementById('result');
+            // Get summary alleles for each locus, defaulting to first if second is empty
+            let summaryAlleles = {};
+            loci.forEach(locus => {
+                let a1 = document.getElementById(locus.ids[0]).value.trim().replace(/\s+/g, '');
+                let a2 = document.getElementById(locus.ids[1]).value.trim().replace(/\s+/g, '');
+                // Only duplicate for DRB1 and DQB1
+                if ((locus.label === 'DRB1' || locus.label === 'DQB1')) {
+                    if (!a1 && a2) a1 = a2;
+                    if (!a2 && a1) a2 = a1;
+                }
+                let s1 = locus.summary(a1);
+                let s2 = locus.summary(a2);
+                summaryAlleles[locus.label] = [s1, s2];
+            });
+            // DRB1 and DQB1
+            let drb1s = summaryAlleles['DRB1'];
+            let dqb1s = summaryAlleles['DQB1'];
+            // DRB3/4/5
+            let drb3s = summaryAlleles['DRB3'];
+            let drb4s = summaryAlleles['DRB4'];
+            let drb5s = summaryAlleles['DRB5'];
+            // If any locus is empty, use ['XX', 'XX']
+            if (!drb1s[0]) drb1s[0] = 'XX';
+            if (!drb1s[1]) drb1s[1] = 'XX';
+            if (!dqb1s[0]) dqb1s[0] = '';
+            if (!dqb1s[1]) dqb1s[1] = '';
+            if (!drb3s[0]) drb3s[0] = '';
+            if (!drb3s[1]) drb3s[1] = '';
+            if (!drb4s[0]) drb4s[0] = '';
+            if (!drb4s[1]) drb4s[1] = '';
+            if (!drb5s[0]) drb5s[0] = '';
+            if (!drb5s[1]) drb5s[1] = '';
+            // Helper to build haplotype string
+            function buildHap(drb1, dqb1, drb3, drb4, drb5) {
+                // If DRB1 is 1, 8, or 10, ignore DRB3/4/5
+                if (["1","8","10"].includes(drb1)) {
+                    return `${drb1}-${dqb1}`;
+                }
+                let drb345 = drb3 ? drb3 : (drb4 ? drb4 : (drb5 ? drb5 : ''));
+                return drb345 ? `${drb1}-${dqb1}-${drb345}` : `${drb1}-${dqb1}`;
+            }
+            // Build DRB345 array: for each haplotype, use DRB3 if present, else DRB4, else DRB5, else blank
+            function getDRB345Values() {
+                let vals = [];
+                // Collect up to two unique values from DRB3, DRB4, DRB5
+                let v1 = drb3s[0] || drb4s[0] || drb5s[0] || '';
+                let v2 = drb3s[1] || drb4s[1] || drb5s[1] || '';
+                // If only one is present, and the other is blank, but DRB5 is present for the other, use that
+                if (!v1 && (drb3s[1] || drb4s[1] || drb5s[1])) v1 = drb3s[1] || drb4s[1] || drb5s[1];
+                if (!v2 && (drb3s[0] || drb4s[0] || drb5s[0])) v2 = drb3s[0] || drb4s[0] || drb5s[0];
+                vals = [v1, v2];
+                // If both are the same, make the second blank
+                if (vals[0] === vals[1]) vals[1] = '';
+                return vals;
+            }
+            const drb345s = getDRB345Values();
+            // Generate both possible orderings for unique pairing
+            const drb345Orders = [
+                [drb345s[0], drb345s[1]],
+                [drb345s[1], drb345s[0]]
+            ];
+            // Four possible pairings
+            const pairings = [
+                { label: 'Possible Haplotype Pairing 1', haps: [buildHap(drb1s[0], dqb1s[0], drb345Orders[0][0], '', ''), buildHap(drb1s[1], dqb1s[1], drb345Orders[0][1], '', '')] },
+                { label: 'Possible Haplotype Pairing 2', haps: [buildHap(drb1s[0], dqb1s[0], drb345Orders[1][0], '', ''), buildHap(drb1s[1], dqb1s[1], drb345Orders[1][1], '', '')] },
+                { label: 'Possible Haplotype Pairing 3', haps: [buildHap(drb1s[0], dqb1s[1], drb345Orders[0][0], '', ''), buildHap(drb1s[1], dqb1s[0], drb345Orders[0][1], '', '')] },
+                { label: 'Possible Haplotype Pairing 4', haps: [buildHap(drb1s[0], dqb1s[1], drb345Orders[1][0], '', ''), buildHap(drb1s[1], dqb1s[0], drb345Orders[1][1], '', '')] }
+            ];
+            let output = '';
+            pairings.forEach(pair => {
+                // Only display the pairing if BOTH haplotypes are recognized
+                const bothRecognized = pair.haps.every(hap =>
+                    haplotypePredispositions[hap] || haplotypePredispositions[hap.toUpperCase()]
+                );
+                if (!bothRecognized) return;
+                output += `<div><strong>${pair.label}:</strong><ul style='margin-top:2px;'>`;
+                pair.haps.forEach((hap, idx) => {
+                    const pred = haplotypePredispositions[hap] || haplotypePredispositions[hap.toUpperCase()];
+                    output += `<li>${hap} <span style='color: #4CAF50;'>(${pred})</span></li>`;
+                });
+                output += `</ul></div>`;
+            });
+            console.log('DRB1:', drb1s);
+            console.log('DQB1:', dqb1s);
+            console.log('DRB3:', drb3s);
+            console.log('DRB5:', drb5s);
+            console.log('hapA:', pairings[0].haps[0], 'hapB:', pairings[0].haps[1]);
+            console.log('Predispositions:', haplotypePredispositions[pairings[0].haps[0]], haplotypePredispositions[pairings[0].haps[1]]);
+            resultDiv.innerHTML = output;
+        }
+        // Mapping of valid haplotypes to genetic predispositions
+        const haplotypePredispositions = {
+            '1-3': 'Benign',
+            '1-4': 'Benign',
+            '1-5': 'Low MSH',
+            '1-8': 'Benign',
+            '4-3-53': 'Multisusceptible',
+            '4-4-53': 'Multisusceptible*',
+            '4-7-53': 'Dinoflagellate',
+            '4-8-53': 'Dinoflagellate',
+            '7-2-53': 'Mold Susceptible',
+            '7-3-53': 'Mold Susceptible',
+            '7-4-53': 'Benign',
+            '7-9-53': 'Benign',
+            '8-3': 'Benign',
+            '8-4': 'Benign',
+            '8-5': 'Benign',
+            '8-6': 'Benign',
+            '8-8': 'Benign',
+            '9-2-53': 'Benign',
+            '9-3-53': 'Benign',
+            '9-7-53': 'Benign',
+            '9-9-53': 'Benign',
+            '10-5': 'Benign',
+            '11-3-52B': 'Multisusceptible',
+            '11-4-52B': 'Benign',
+            '11-5-52B': 'Benign',
+            '11-7-52B': 'MARCoNS',
+            '11-8-52B': 'Benign',
+            '12-3-52B': 'Multisusceptible',
+            '12-5-52B': 'Benign',
+            '12-7-52B': 'MARCoNS',
+            '13-3-52A': 'Benign',
+            '13-3-52B': 'Benign',
+            '13-6-52A': 'Mold Susceptible',
+            '13-6-52B': 'Mold Susceptible',
+            '13-6-52C': 'Mold Susceptible',
+            '13-7-52A': 'Benign',
+            '13-7-52B': 'Benign',
+            '13-7-52C': 'Benign',
+            '14-3-52B': 'Benign',
+            '14-5-52B': 'Multisusceptible',
+            '14-7-52B': 'Benign',
+            '15-5-51': 'Benign',
+            '15-6-51': 'Post Lyme',
+            '16-5-51': 'Post Lyme',
+            '16-6-51': 'Benign',
+            '17-2-52A': 'Mold Susceptible',
+            '17-2-52B': 'Mold Susceptible',
+            '17-2-52C': 'Benign',
+            '17-3-52A': 'Benign',
+            '17-3-52B': 'Benign',
+            '17-3-52C': 'Benign',
+            '17-4-52A': 'Benign',
+            '17-4-52B': 'Benign',
+            '18-4-52A': 'Mold Susceptible',
+            '18-4-52B': 'Mold Susceptible*'
+        };
+    </script>
+</body>
+</html>
